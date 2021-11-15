@@ -1,3 +1,6 @@
+clc;
+clear;
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Geometry and flow definitions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -7,7 +10,7 @@ center = [-0.07; 0.07];
 radius = norm(center - [a;0]);
 
 u = 2.5;
-AoA = 0.0;
+AoA = 20.0;
 
 u_inf = u * cosd(AoA);
 v_inf = u * sind(AoA);
@@ -106,23 +109,32 @@ airfoil_p_stat = (p_atm - airfoil_p_dyn) .* airfoil_mask;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Scan airfoil pressure distribution
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-figure(2);
-airfoil = [airfoil_x; airfoil_y];
+airfoil = [airfoil_x; airfoil_y]; % get segment geometry
 segment_dir = [airfoil(:,2:end), airfoil(:,1)] - airfoil;
 segment_length = vecnorm(segment_dir);
+segment_pos = airfoil + 0.5 * segment_dir;
 segment_normal = [segment_dir(2,:); -segment_dir(1,:)] ./ segment_length;
-segment_pscan = airfoil + 0.5 * segment_dir + 0.05 * segment_normal;
 
+segment_pscan = segment_pos + 0.05 * segment_normal; % Scan pressure field
 segment_pressure = interp2(mesh_x, mesh_y, airfoil_p_stat, segment_pscan(1,:), segment_pscan(2,:));
-
 segment_force = - segment_pressure .* segment_length .* segment_normal;
 
-airfoil_lift = sum(segment_force, 2);
 
-airfoil_CoL = sum((airfoil + 0.5 * segment_dir) .* segment_force, 2) ./ sum(airfoil + 0.5 * segment_dir, 2);
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Calculate airfoil lift and CoL
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+airfoil_lift = sum(segment_force, 2); % sum forces to get lift
+
+l = length(segment_pos); % calculate moment of segments around origin
+segment_moment = cross([segment_pos; zeros(1,l)], [segment_force; zeros(1,l)]);
+segment_moment = segment_moment(3,:);
+
+airfoil_moment = sum(segment_moment); % sum moments and calculate moment arm
+h = airfoil_moment / norm(airfoil_lift);
+
+airfoil_CoL = h * [airfoil_lift(2); -airfoil_lift(1)] / norm([airfoil_lift(2); -airfoil_lift(1)]); % apply moment arm
 
 
-figure(1);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Plot flow diagrams
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -150,7 +162,8 @@ contour(mesh_x, mesh_y, airfoil_Phi);
 colorbar;
 streamline(mesh_x, mesh_y, airfoil_u, airfoil_v, -2*ones(1,30), linspace(-2,2,30));
 %streamline(mesh_x, mesh_y, -airfoil_u, -airfoil_v, 2*ones(1,30), linspace(-2,2,30));
-quiver(airfoil_x + segment_dir(1,:) / 2, airfoil_y + segment_dir(2,:) / 2, airfoil_segment_force(1,:), airfoil_segment_force(2,:));
+%quiver(segment_pos(1,:), segment_pos(2,:), segment_force(1,:), segment_force(2,:));
+quiver(airfoil_CoL(1), airfoil_CoL(2), 0.1 * airfoil_lift(1), 0.1 * airfoil_lift(2));
 legend('Airfoil', 'Potentiallinien', 'Stromlinien');
 view(2);
 axis equal;
@@ -174,7 +187,6 @@ title('Statischer Druck um Zylinder');
 
 subplot(2,2,4);
 surf(mesh_x, mesh_y, airfoil_p_stat);
-%surf(mesh_x, mesh_y, airfoil_Phi);
 colorbar;
 hold;
 view(2);
